@@ -1,69 +1,450 @@
 mod event;
 
-use std::any::TypeId;
-
 pub use event::*;
-use iced::{widget::{Row, Container}, Application};
+use iced::{widget::{container, PaneGrid, pane_grid::{self}}, Application, Length, Element, Color};
 
-use crate::{widget::{WidgetHandle, HeartbeatWidget, Widget}, can::{self, CanUdpSocket}};
+use iced::alignment::{self, Alignment};
+use iced::executor;
+use iced::keyboard;
+use iced::theme::{self, Theme};
+use iced::widget::{
+    button, column, row, scrollable, text,
+};
+use iced::Command;
+
+use crate::widget::{WidgetHandle, HeartbeatWidget};
 
 pub struct App {
-	widgets: Vec<WidgetHandle>,
-	widget: Option<WidgetHandle>,
+    panes: pane_grid::State<WidgetHandle>,
+    panes_created: usize,
+    focus: Option<pane_grid::Pane>,
+}
+
+#[derive(Debug, Clone)]
+pub enum Message {
+    Split(pane_grid::Axis, pane_grid::Pane),
+    SplitFocused(pane_grid::Axis),
+    FocusAdjacent(pane_grid::Direction),
+    Clicked(pane_grid::Pane),
+    Dragged(pane_grid::DragEvent),
+    Resized(pane_grid::ResizeEvent),
+    TogglePin(pane_grid::Pane),
+    Maximize(pane_grid::Pane),
+    Restore,
+    Close(pane_grid::Pane),
+    CloseFocused,
 }
 
 impl Application for App {
-    
-	type Executor = iced::executor::Default;
-    type Message = EventBox;
-    type Theme = iced::Theme;
+    type Message = Message;
+    type Theme = Theme;
+    type Executor = executor::Default;
     type Flags = ();
 
-    fn new(_: Self::Flags) -> (Self, iced::Command<Self::Message>) {
-		(
-			Self { 
-				widget: None, 
-				widgets: vec![
-					WidgetHandle::new(HeartbeatWidget::default())
-				] 
-			}, 
-			iced::Command::none()
-		)
+    fn new(_flags: ()) -> (Self, Command<Message>) {
+        let (panes, _) = pane_grid::State::new(WidgetHandle::new(0, HeartbeatWidget::default()));
+
+        (
+            App {
+                panes,
+                panes_created: 1,
+                focus: None,
+            },
+            Command::none(),
+        )
     }
 
     fn title(&self) -> String {
-        "CanMonitor".to_owned()
+        String::from("Pane grid - Iced")
     }
 
-	fn subscription(&self) -> iced::Subscription<Self::Message> {
-		struct CanSocket;
-		iced::subscription::channel(TypeId::of::<CanSocket>(), 0, can::udp_socket)
-	}
+    fn update(&mut self, message: Message) -> Command<Message> {
+        match message {
+            Message::Split(axis, pane) => {
+                let result = self.panes.split(
+                    axis,
+                    &pane,
+                    WidgetHandle::new(self.panes_created, HeartbeatWidget::default()),
+                );
 
-    fn update(&mut self, e: Self::Message) -> iced::Command<Self::Message> {
+                if let Some((pane, _)) = result {
+                    self.focus = Some(pane);
+                }
 
-		match e.unbox::<CanUdpSocket>() {
-			Some(_) => {
-				println!("Received sender");
-			}
-			None => {
-				for widget in self.widgets.iter_mut() {
-					widget.update(e.type_id(), e.event());
-				}
-			}
-		}
+                self.panes_created += 1;
+            }
+            Message::SplitFocused(axis) => {
+                if let Some(pane) = self.focus {
+                    let result = self.panes.split(
+                        axis,
+                        &pane,
+                        WidgetHandle::new(self.panes_created, HeartbeatWidget::default()),
+                    );
 
-		iced::Command::none()
-	}
+                    if let Some((pane, _)) = result {
+                        self.focus = Some(pane);
+                    }
 
-    fn view(&self) -> iced::Element<'_, Self::Message, iced::Renderer<Self::Theme>> {
-		
-		let children = self.widgets.iter()
-			.map(|w|w.view())
-			.collect();
+                    self.panes_created += 1;
+                }
+            }
+            Message::FocusAdjacent(direction) => {
+                if let Some(pane) = self.focus {
+                    if let Some(adjacent) =
+                        self.panes.adjacent(&pane, direction)
+                    {
+                        self.focus = Some(adjacent);
+                    }
+                }
+            }
+            Message::Clicked(pane) => {
+                self.focus = Some(pane);
+            }
+            Message::Resized(pane_grid::ResizeEvent { split, ratio }) => {
+                self.panes.resize(&split, ratio);
+            }
+            Message::Dragged(pane_grid::DragEvent::Dropped {
+                pane,
+                target,
+            }) => {
+                self.panes.drop(&pane, target);
+            }
+            Message::Dragged(_) => {}
+            Message::TogglePin(pane) => {
+                if let Some(WidgetHandle { is_pinned, .. }) = self.panes.get_mut(&pane)
+                {
+                    *is_pinned = !*is_pinned;
+                }
+            }
+            Message::Maximize(pane) => self.panes.maximize(&pane),
+            Message::Restore => {
+                self.panes.restore();
+            }
+            Message::Close(pane) => {
+                if let Some((_, sibling)) = self.panes.close(&pane) {
+                    self.focus = Some(sibling);
+                }
+            }
+            Message::CloseFocused => {
+                if let Some(pane) = self.focus {
+                    if let Some(WidgetHandle { is_pinned, .. }) = self.panes.get(&pane)
+                    {
+                        if !is_pinned {
+                            if let Some((_, sibling)) = self.panes.close(&pane)
+                            {
+                                self.focus = Some(sibling);
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
-		let row = Row::with_children(children);
-		
-		Container::new(row).into()
+        Command::none()
+    }
+
+    // fn subscription(&self) -> Subscription<Message> {
+    
+    // }
+
+    fn view(&self) -> Element<Message> {
+        let focus = self.focus;
+        let total_panes = self.panes.len();
+
+        let pane_grid = PaneGrid::new(&self.panes, |id, pane, is_maximized| {
+            let is_focused = focus == Some(id);
+
+            let pin_button = button(
+                text(if pane.is_pinned { "Unpin" } else { "Pin" }).size(14),
+            )
+            .on_press(Message::TogglePin(id))
+            .padding(3);
+
+            let title = row![
+                pin_button,
+                "Pane",
+                text(pane.id.to_string()).style(if is_focused {
+                    PANE_ID_COLOR_FOCUSED
+                } else {
+                    PANE_ID_COLOR_UNFOCUSED
+                }),
+            ]
+            .spacing(5);
+
+            let title_bar = pane_grid::TitleBar::new(title)
+                .controls(view_controls(
+                    id,
+                    total_panes,
+                    pane.is_pinned,
+                    is_maximized,
+                ))
+                .padding(10)
+                .style(if is_focused {
+                    style::title_bar_focused
+                } else {
+                    style::title_bar_active
+                });
+
+            pane_grid::Content::new(
+				view_content(id, pane, total_panes)
+			)
+            .title_bar(title_bar)
+            .style(if is_focused {
+                style::pane_focused
+            } else {
+                style::pane_active
+            })
+        })
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .spacing(10)
+        .on_click(Message::Clicked)
+        .on_drag(Message::Dragged)
+        .on_resize(10, Message::Resized);
+
+        container(pane_grid)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(10)
+            .into()
     }
 }
+
+const PANE_ID_COLOR_UNFOCUSED: Color = Color::from_rgb(
+    0xFF as f32 / 255.0,
+    0xC7 as f32 / 255.0,
+    0xC7 as f32 / 255.0,
+);
+const PANE_ID_COLOR_FOCUSED: Color = Color::from_rgb(
+    0xFF as f32 / 255.0,
+    0x47 as f32 / 255.0,
+    0x47 as f32 / 255.0,
+);
+
+fn view_content<'a>(
+    pane: pane_grid::Pane,
+	handle: &WidgetHandle,
+    total_panes: usize,
+) -> Element<'a, Message> {
+    let button = |label, message| {
+        button(
+            text(label)
+                .width(Length::Fill)
+                .horizontal_alignment(alignment::Horizontal::Center)
+                .size(16),
+        )
+        .width(Length::Fill)
+        .padding(8)
+        .on_press(message)
+    };
+
+    let mut controls = column![
+        button(
+            "Split horizontally",
+            Message::Split(pane_grid::Axis::Horizontal, pane),
+        ),
+        button(
+            "Split vertically",
+            Message::Split(pane_grid::Axis::Vertical, pane),
+        )
+    ]
+    .spacing(5)
+    .max_width(160);
+
+    if total_panes > 1 && !handle.is_pinned {
+        controls = controls.push(
+            button("Close", Message::Close(pane))
+                .style(theme::Button::Destructive),
+        );
+    } else {
+		controls = controls.push(handle.view().into())
+	}
+
+    let content = column![
+        controls,
+    ]
+    .width(Length::Fill)
+    .spacing(10)
+    .align_items(Alignment::Center);
+
+    container(scrollable(content))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .padding(5)
+        .center_y()
+        .into()
+}
+
+fn view_controls<'a>(
+    pane: pane_grid::Pane,
+    total_panes: usize,
+    is_pinned: bool,
+    is_maximized: bool,
+) -> Element<'a, Message> {
+    let mut row = row![].spacing(5);
+
+    if total_panes > 1 {
+        let toggle = {
+            let (content, message) = if is_maximized {
+                ("Restore", Message::Restore)
+            } else {
+                ("Maximize", Message::Maximize(pane))
+            };
+            button(text(content).size(14))
+                .style(theme::Button::Secondary)
+                .padding(3)
+                .on_press(message)
+        };
+
+        row = row.push(toggle);
+    }
+
+    let mut close = button(text("Close").size(14))
+        .style(theme::Button::Destructive)
+        .padding(3);
+
+    if total_panes > 1 && !is_pinned {
+        close = close.on_press(Message::Close(pane));
+    }
+
+    row.push(close).into()
+}
+
+mod style {
+    use iced::widget::container;
+    use iced::Theme;
+
+    pub fn title_bar_active(theme: &Theme) -> container::Appearance {
+        let palette = theme.extended_palette();
+
+        container::Appearance {
+            text_color: Some(palette.background.strong.text),
+            background: Some(palette.background.strong.color.into()),
+            ..Default::default()
+        }
+    }
+
+    pub fn title_bar_focused(theme: &Theme) -> container::Appearance {
+        let palette = theme.extended_palette();
+
+        container::Appearance {
+            text_color: Some(palette.primary.strong.text),
+            background: Some(palette.primary.strong.color.into()),
+            ..Default::default()
+        }
+    }
+
+    pub fn pane_active(theme: &Theme) -> container::Appearance {
+        let palette = theme.extended_palette();
+
+        container::Appearance {
+            background: Some(palette.background.weak.color.into()),
+            border_width: 2.0,
+            border_color: palette.background.strong.color,
+            ..Default::default()
+        }
+    }
+
+    pub fn pane_focused(theme: &Theme) -> container::Appearance {
+        let palette = theme.extended_palette();
+
+        container::Appearance {
+            background: Some(palette.background.weak.color.into()),
+            border_width: 2.0,
+            border_color: palette.primary.strong.color,
+            ..Default::default()
+        }
+    }
+}
+
+// pub struct App {
+// 	panes: pane_grid::State<WidgetHandle>,
+// 	widgets: Vec<WidgetHandle>,
+// }
+
+// impl App {
+
+// 	pub fn add_widget(&mut self, widget: impl Widget + 'static) {
+// 		self.widgets.push(WidgetHandle::new(widget));
+// 	}
+
+// }
+
+// impl Application for App {
+    
+// 	type Executor = iced::executor::Default;
+//     type Message = EventBox;
+//     type Theme = iced::Theme;
+//     type Flags = ();
+
+//     fn new(_: Self::Flags) -> (Self, iced::Command<Self::Message>) {
+
+// 		let (state, pane) = pane_grid::State::new(
+// 			WidgetHandle::new(HeartbeatWidget::default())
+// 		);
+
+// 		let mut app = Self {
+// 			panes: state, 
+// 			widgets: Default::default() 
+// 		};
+	
+// 		app.panes.split(pane_grid::Axis::Horizontal, &pane, WidgetHandle::new(HeartbeatWidget::default()));
+
+// 		(app, iced::Command::none())
+//     }
+
+//     fn title(&self) -> String {
+//         "CanMonitor".to_owned()
+//     }
+
+// 	fn subscription(&self) -> iced::Subscription<Self::Message> {
+// 		struct CanSocket;
+// 		iced::subscription::channel(TypeId::of::<CanSocket>(), 0, can::udp_socket)
+// 	}
+
+//     fn update(&mut self, e: Self::Message) -> iced::Command<Self::Message> {
+
+// 		match e.unbox::<CanUdpSocket>() {
+// 			Some(_) => {
+// 				println!("Received sender");
+// 			}
+// 			None => {
+// 				for widget in self.widgets.iter_mut() {
+// 					widget.update(e.type_id(), e.event());
+// 				}
+// 			}
+// 		}
+
+// 		iced::Command::none()
+// 	}
+
+//     fn view(&self) -> iced::Element<'_, Self::Message, iced::Renderer<Self::Theme>> {
+
+// 		let widgets = self.widgets.iter()
+// 			.map(|w|w.view())
+// 			.collect();
+
+// 		let body: Element<_,_> = Row::with_children(widgets)
+// 			.width(Length::Fill)
+// 			.height(Length::Fill)
+// 			.into();
+
+// 		let grid = PaneGrid::new(&self.panes, |id, pane, is_maximized|{
+// 			Text::new("Pane").into()
+// 		});
+
+// 		container(grid)
+// 			.width(Length::Fill)
+// 			.height(Length::Fill)
+// 			.padding(10)
+// 			.style(|theme: &iced::Theme|container::Appearance {
+// 				background: Some(
+// 					iced::Background::Color(
+// 						Color::from_rgb(255.0, 0.0, 0.0)
+// 					)
+// 				),
+// 				..Default::default()
+// 			})
+// 			.into()
+//     }
+// }

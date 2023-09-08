@@ -4,19 +4,22 @@ use crate::{Event, EventBox};
 use super::Widget;
 
 
-
 pub struct WidgetHandle {  
+	pub id: usize,
+	pub is_pinned: bool,
 	widget: Rc<RefCell<dyn Widget>>,
 	subscriptions: Vec<(TypeId, Box<dyn Fn(&mut dyn Widget, &dyn Event)>)>
 }
 
 impl WidgetHandle {
 
-	pub fn new(widget: impl Widget + 'static) -> Self {
+	pub fn new(id: usize, widget: impl Widget + 'static) -> Self {
 	
 		let widget = Rc::new(RefCell::new(widget));
 
 		let mut handle = Self {
+			id: id,
+			is_pinned: false,
 			widget: widget.clone(),
 			subscriptions: Vec::default()
 		};
