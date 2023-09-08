@@ -1,7 +1,9 @@
 mod event;
 
+use std::any::TypeId;
+
 pub use event::*;
-use iced::{widget::{container, PaneGrid, pane_grid::{self}}, Application, Length, Element, Color};
+use iced::{widget::{container, PaneGrid, pane_grid::{self}, Container}, Application, Length, Element, Color};
 
 use iced::alignment::{self, Alignment};
 use iced::executor;
@@ -12,7 +14,7 @@ use iced::widget::{
 };
 use iced::Command;
 
-use crate::widget::{WidgetHandle, HeartbeatWidget};
+use crate::{widget::{WidgetHandle, HeartbeatWidget}, can::{self, CanUdpSocket}};
 
 pub struct App {
     panes: pane_grid::State<WidgetHandle>,
@@ -21,7 +23,7 @@ pub struct App {
 }
 
 #[derive(Debug, Clone)]
-pub enum Message {
+pub enum AppMessage {
     Split(pane_grid::Axis, pane_grid::Pane),
     SplitFocused(pane_grid::Axis),
     FocusAdjacent(pane_grid::Direction),
@@ -35,13 +37,15 @@ pub enum Message {
     CloseFocused,
 }
 
+impl Event for AppMessage {}
+
 impl Application for App {
-    type Message = Message;
+    type Message = EventBox;
     type Theme = Theme;
     type Executor = executor::Default;
     type Flags = ();
 
-    fn new(_flags: ()) -> (Self, Command<Message>) {
+    fn new(_flags: ()) -> (Self, Command<EventBox>) {
         let (panes, _) = pane_grid::State::new(WidgetHandle::new(0, HeartbeatWidget::default()));
 
         (
@@ -58,106 +62,127 @@ impl Application for App {
         String::from("Pane grid - Iced")
     }
 
-    fn update(&mut self, message: Message) -> Command<Message> {
-        match message {
-            Message::Split(axis, pane) => {
-                let result = self.panes.split(
-                    axis,
-                    &pane,
-                    WidgetHandle::new(self.panes_created, HeartbeatWidget::default()),
-                );
+    fn update(&mut self, message: EventBox) -> Command<EventBox> {
 
-                if let Some((pane, _)) = result {
-                    self.focus = Some(pane);
-                }
+		match message.unbox::<CanUdpSocket>() {
+			Some(_) => {
+				println!("Received sender");
+			}
+			None => {
+				for widget in self.panes.iter_mut() {
+					widget.1.update(message.type_id(), message.event());
+				}
+			}
+		}
 
-                self.panes_created += 1;
-            }
-            Message::SplitFocused(axis) => {
-                if let Some(pane) = self.focus {
-                    let result = self.panes.split(
-                        axis,
-                        &pane,
-                        WidgetHandle::new(self.panes_created, HeartbeatWidget::default()),
-                    );
 
-                    if let Some((pane, _)) = result {
-                        self.focus = Some(pane);
-                    }
+		if message.is::<AppMessage>() {
+			let message = message.unbox_unchecked();
 
-                    self.panes_created += 1;
-                }
-            }
-            Message::FocusAdjacent(direction) => {
-                if let Some(pane) = self.focus {
-                    if let Some(adjacent) =
-                        self.panes.adjacent(&pane, direction)
-                    {
-                        self.focus = Some(adjacent);
-                    }
-                }
-            }
-            Message::Clicked(pane) => {
-                self.focus = Some(pane);
-            }
-            Message::Resized(pane_grid::ResizeEvent { split, ratio }) => {
-                self.panes.resize(&split, ratio);
-            }
-            Message::Dragged(pane_grid::DragEvent::Dropped {
-                pane,
-                target,
-            }) => {
-                self.panes.drop(&pane, target);
-            }
-            Message::Dragged(_) => {}
-            Message::TogglePin(pane) => {
-                if let Some(WidgetHandle { is_pinned, .. }) = self.panes.get_mut(&pane)
-                {
-                    *is_pinned = !*is_pinned;
-                }
-            }
-            Message::Maximize(pane) => self.panes.maximize(&pane),
-            Message::Restore => {
-                self.panes.restore();
-            }
-            Message::Close(pane) => {
-                if let Some((_, sibling)) = self.panes.close(&pane) {
-                    self.focus = Some(sibling);
-                }
-            }
-            Message::CloseFocused => {
-                if let Some(pane) = self.focus {
-                    if let Some(WidgetHandle { is_pinned, .. }) = self.panes.get(&pane)
-                    {
-                        if !is_pinned {
-                            if let Some((_, sibling)) = self.panes.close(&pane)
-                            {
-                                self.focus = Some(sibling);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+			match message {
+				AppMessage::Split(axis, pane) => {
+					let result = self.panes.split(
+						*axis,
+						&pane,
+						WidgetHandle::new(self.panes_created, HeartbeatWidget::default()),
+					);
+
+					if let Some((pane, _)) = result {
+						self.focus = Some(pane);
+					}
+
+					self.panes_created += 1;
+				}
+				AppMessage::SplitFocused(axis) => {
+					if let Some(pane) = self.focus {
+						let result = self.panes.split(
+							*axis,
+							&pane,
+							WidgetHandle::new(self.panes_created, HeartbeatWidget::default()),
+						);
+
+						if let Some((pane, _)) = result {
+							self.focus = Some(pane);
+						}
+
+						self.panes_created += 1;
+					}
+				}
+				AppMessage::FocusAdjacent(direction) => {
+					if let Some(pane) = self.focus {
+						if let Some(adjacent) =
+							self.panes.adjacent(&pane, *direction)
+						{
+							self.focus = Some(adjacent);
+						}
+					}
+				}
+				AppMessage::Clicked(pane) => {
+					self.focus = Some(*pane);
+				}
+				AppMessage::Resized(pane_grid::ResizeEvent { split, ratio }) => {
+					self.panes.resize(&split, *ratio);
+				}
+				AppMessage::Dragged(pane_grid::DragEvent::Dropped {
+					pane,
+					target,
+				}) => {
+					self.panes.drop(&pane, *target);
+				}
+				AppMessage::Dragged(_) => {}
+				AppMessage::TogglePin(pane) => {
+					if let Some(WidgetHandle { is_pinned, .. }) = self.panes.get_mut(&pane)
+					{
+						*is_pinned = !*is_pinned;
+					}
+				}
+				AppMessage::Maximize(pane) => self.panes.maximize(&pane),
+				AppMessage::Restore => {
+					self.panes.restore();
+				}
+				AppMessage::Close(pane) => {
+					if let Some((_, sibling)) = self.panes.close(&pane) {
+						self.focus = Some(sibling);
+					}
+				}
+				AppMessage::CloseFocused => {
+					if let Some(pane) = self.focus {
+						if let Some(WidgetHandle { is_pinned, .. }) = self.panes.get(&pane)
+						{
+							if !is_pinned {
+								if let Some((_, sibling)) = self.panes.close(&pane)
+								{
+									self.focus = Some(sibling);
+								}
+							}
+						}
+					}
+				}
+			}
+
+		}
+
+      
 
         Command::none()
     }
 
-    // fn subscription(&self) -> Subscription<Message> {
-    
-    // }
+	fn subscription(&self) -> iced::Subscription<Self::Message> {
+		struct CanSocket;
+		iced::subscription::channel(TypeId::of::<CanSocket>(), 0, can::udp_socket)
+	}
 
-    fn view(&self) -> Element<Message> {
+    fn view(&self) -> Element<Self::Message> {
         let focus = self.focus;
         let total_panes = self.panes.len();
 
-        let pane_grid = PaneGrid::new(&self.panes, |id, pane, is_maximized| {
+        let pane_grid = PaneGrid::<EventBox, _>::new(&self.panes, |id, pane, is_maximized| {
             let is_focused = focus == Some(id);
 
             let pin_button = button(
                 text(if pane.is_pinned { "Unpin" } else { "Pin" }).size(14),
             )
-            .on_press(Message::TogglePin(id))
+            .on_press(AppMessage::TogglePin(id).into())
             .padding(3);
 
             let title = row![
@@ -183,30 +208,34 @@ impl Application for App {
                     style::title_bar_focused
                 } else {
                     style::title_bar_active
-                });
+                }).into();
 
-            pane_grid::Content::new(
+			pane_grid::Content::new(
 				view_content(id, pane, total_panes)
 			)
-            .title_bar(title_bar)
-            .style(if is_focused {
-                style::pane_focused
-            } else {
-                style::pane_active
-            })
+			.title_bar(title_bar)
+			.style(
+				if is_focused {
+					style::pane_focused
+				} else {
+				style::pane_active
+				}
+			)
+			.into()
         })
         .width(Length::Fill)
         .height(Length::Fill)
         .spacing(10)
-        .on_click(Message::Clicked)
-        .on_drag(Message::Dragged)
-        .on_resize(10, Message::Resized);
+		.on_click(|e|AppMessage::Clicked(e).into())
+        .on_drag(|e|AppMessage::Dragged(e).into())
+        .on_resize(10, |e|AppMessage::Resized(e).into());
+	
 
-        container(pane_grid)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .padding(10)
-            .into()
+		Container::new(pane_grid)
+			.width(Length::Fill)
+			.height(Length::Fill)
+			.padding(10)
+			.into()
     }
 }
 
@@ -225,7 +254,7 @@ fn view_content<'a>(
     pane: pane_grid::Pane,
 	handle: &WidgetHandle,
     total_panes: usize,
-) -> Element<'a, Message> {
+) -> Element<'a, EventBox> {
     let button = |label, message| {
         button(
             text(label)
@@ -241,23 +270,25 @@ fn view_content<'a>(
     let mut controls = column![
         button(
             "Split horizontally",
-            Message::Split(pane_grid::Axis::Horizontal, pane),
+            AppMessage::Split(pane_grid::Axis::Horizontal, pane).into(),
         ),
         button(
             "Split vertically",
-            Message::Split(pane_grid::Axis::Vertical, pane),
+            AppMessage::Split(pane_grid::Axis::Vertical, pane).into(),
         )
     ]
     .spacing(5)
-    .max_width(160);
+    .width(Length::Fill);
 
     if total_panes > 1 && !handle.is_pinned {
         controls = controls.push(
-            button("Close", Message::Close(pane))
+            button("Close", AppMessage::Close(pane).into())
                 .style(theme::Button::Destructive),
         );
     } else {
-		controls = controls.push(handle.view().into())
+		controls = controls.push(
+			handle.view()
+		)
 	}
 
     let content = column![
@@ -267,11 +298,9 @@ fn view_content<'a>(
     .spacing(10)
     .align_items(Alignment::Center);
 
-    container(scrollable(content))
+    container(scrollable(content).width(Length::Fill))
         .width(Length::Fill)
-        .height(Length::Fill)
         .padding(5)
-        .center_y()
         .into()
 }
 
@@ -280,15 +309,15 @@ fn view_controls<'a>(
     total_panes: usize,
     is_pinned: bool,
     is_maximized: bool,
-) -> Element<'a, Message> {
+) -> Element<'a, EventBox> {
     let mut row = row![].spacing(5);
 
     if total_panes > 1 {
         let toggle = {
             let (content, message) = if is_maximized {
-                ("Restore", Message::Restore)
+                ("Restore", AppMessage::Restore.into())
             } else {
-                ("Maximize", Message::Maximize(pane))
+                ("Maximize", AppMessage::Maximize(pane).into())
             };
             button(text(content).size(14))
                 .style(theme::Button::Secondary)
@@ -304,7 +333,7 @@ fn view_controls<'a>(
         .padding(3);
 
     if total_panes > 1 && !is_pinned {
-        close = close.on_press(Message::Close(pane));
+        close = close.on_press(AppMessage::Close(pane).into());
     }
 
     row.push(close).into()

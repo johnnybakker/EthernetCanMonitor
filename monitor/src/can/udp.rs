@@ -13,7 +13,8 @@ impl Event for CanUdpSocket {}
 
 pub async fn udp_socket(mut output: mpsc::Sender<EventBox>) -> Infallible {
 
-	let mut buf = [0u8; std::mem::size_of::<CanPacket>()];
+	const CAN_PACKET_SIZE: usize = std::mem::size_of::<CanPacket>();
+	let mut buf = [0u8; CAN_PACKET_SIZE];
 	let addr = SocketAddr::from(([0, 0, 0, 0], 5000));
 
 	let (tx, mut rx) = channel::<CanPacket>(0);
@@ -21,6 +22,7 @@ pub async fn udp_socket(mut output: mpsc::Sender<EventBox>) -> Infallible {
 
 	let socket = UdpSocket::bind(addr).unwrap();
 	socket.set_broadcast(true).unwrap();
+	//socket.join_multicast_v4(&Ipv4Addr::BROADCAST,& Ipv4Addr::UNSPECIFIED).unwrap();
 	socket.set_read_timeout(Some(Duration::from_micros(10))).unwrap();
 
 	let broadcast_addr = SocketAddr::new(Ipv4Addr::BROADCAST.into(), 5000);
@@ -40,14 +42,15 @@ pub async fn udp_socket(mut output: mpsc::Sender<EventBox>) -> Infallible {
 	
 
 		let msg = match socket.recv_from(&mut buf) {
-			Ok((_size, _addr)) => unsafe {
+			Ok((_size, _addr)) =>  unsafe {
 				Some(*(buf.as_slice() as *const [u8] as *const CanPacket))
 			},
-			Err(_) => None,
+			Err(_) => {
+				//println!("Error: {:#?}", e);
+				None
+			}
 		};
 
-		
-	
 		if let Some(msg) = msg {
 			let event = EventBox::from(CanPacketIn(msg, Instant::now()));
 			let _ = output.send(event).await;

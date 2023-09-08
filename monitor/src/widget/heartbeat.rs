@@ -1,6 +1,6 @@
 use std::time::{Instant, Duration};
 use common::can::{CanOpenPacket, CanPacket};
-use iced::widget::{Text, TextInput, Row};
+use iced::{widget::{Text, TextInput, Row, Column}, Length};
 
 use crate::{widget::Widget, EventBox, can::CanPacketIn, Event};
 
@@ -25,8 +25,8 @@ pub struct HeartbeatWidget {
 impl Default for HeartbeatWidget {
 	fn default() -> Self {
         Self { 
-			node_id_input: "0x20".to_owned(),
-			node_id: 0x20, 
+			node_id_input: "0x30".to_owned(),
+			node_id: 0x30, 
 			count: 0, 
 			last_received: Instant::now(),
 			delta_time: Duration::ZERO
@@ -37,10 +37,13 @@ impl Default for HeartbeatWidget {
 impl HeartbeatWidget {
 
 	fn on_can_packet(&mut self, packet: &CanPacketIn) {
-		if self.node_id == packet.0.get_node_id() {
-        	self.count += 1;
-			self.delta_time = packet.1 - self.last_received;
-			self.last_received = packet.1;
+
+		if packet.0.id ^ packet.0.get_node_id() as u32 == 0x700 { 
+			if self.node_id == packet.0.get_node_id() {
+				self.count += 1;
+				self.delta_time = packet.1 - self.last_received;
+				self.last_received = packet.1;
+			}
 		}
 	}
 
@@ -76,7 +79,6 @@ impl Widget for HeartbeatWidget {
 		let text_input = TextInput::new("0x00", &self.node_id_input)
 			.on_input(|str|HeartbeatWidgetEvent::OnNodeId(str).into())
 			.width(100);
-			//.on_submit(|str|);
 
 		Row::with_children(vec![
 			text_input.into(),
@@ -84,7 +86,10 @@ impl Widget for HeartbeatWidget {
 				format!("Heartbeat {:#04x}: {}, {} since last message", 
 					self.node_id, self.count, self.delta_time.as_micros() as f64 / 1000.0)
 			).into()
-		]).into()
+		])
+		.padding(10)
+		.width(Length::Fill).align_items(iced::Alignment::Center)
+		.into()
 
 	
 	}
