@@ -9,7 +9,7 @@ fn main() -> std::io::Result<()> {
 	socket.set_broadcast(true)?;
 	socket.set_read_timeout(Some(Duration::from_millis(1000)))?;
 
-	let heartbeat = CanPacket::new(0x720, 0, [255; 8]);
+	let heartbeat = CanPacket::new(0x730, 0, [255; 8]);
 	
 	let buf = unsafe {
 		std::slice::from_raw_parts(

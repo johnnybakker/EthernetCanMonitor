@@ -14,7 +14,7 @@ use iced::widget::{
 };
 use iced::Command;
 
-use crate::{widget::{WidgetHandle, HeartbeatWidget}, can::{self, CanUdpSocket}};
+use crate::{widget::{WidgetHandle, CanMessageWidget}, can::{self, CanUdpSocket}};
 
 pub struct App {
     panes: pane_grid::State<WidgetHandle>,
@@ -46,7 +46,7 @@ impl Application for App {
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<EventBox>) {
-        let (panes, _) = pane_grid::State::new(WidgetHandle::new(0, HeartbeatWidget::default()));
+        let (panes, _) = pane_grid::State::new(WidgetHandle::new(0, CanMessageWidget::default()));
 
         (
             App {
@@ -84,7 +84,7 @@ impl Application for App {
 					let result = self.panes.split(
 						*axis,
 						&pane,
-						WidgetHandle::new(self.panes_created, HeartbeatWidget::default()),
+						WidgetHandle::new(self.panes_created, CanMessageWidget::default()),
 					);
 
 					if let Some((pane, _)) = result {
@@ -98,7 +98,7 @@ impl Application for App {
 						let result = self.panes.split(
 							*axis,
 							&pane,
-							WidgetHandle::new(self.panes_created, HeartbeatWidget::default()),
+							WidgetHandle::new(self.panes_created, CanMessageWidget::default()),
 						);
 
 						if let Some((pane, _)) = result {
