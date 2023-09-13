@@ -1,13 +1,13 @@
-use std::{time::{Instant, Duration}, collections::{self, BTreeMap}};
-use common::can::{CanOpenPacket, CanPacket};
-use iced::{widget::{Text, TextInput, Row, Column, text::Appearance}, Length, Color};
+use std::{time::{Instant, Duration}, collections::BTreeMap};
+use common::can::CanPacket;
+use iced::{widget::{Text, Row, Column, scrollable}, Length};
 
-use crate::{widget::Widget, EventBox, can::CanPacketIn, Event};
+use crate::{widget::Widget, EventBox, can::CanPacketIn};
 
 use super::WidgetHandle;
 
 #[derive(Debug, Clone)]
-pub struct CanMessageEntry {
+struct CanMessageEntry {
 	id: u32,
 	count: i32,
 	last_received: Instant,
@@ -33,17 +33,17 @@ impl CanMessageEntry {
 }
 
 #[derive(Debug, Clone)]
-pub struct CanMessageWidget {
+pub struct TableWidget {
 	map: BTreeMap<u32, CanMessageEntry>,
 }
 
-impl Default for CanMessageWidget {
+impl Default for TableWidget {
 	fn default() -> Self {
         Self { map: Default::default() }
     }
 }
 
-impl CanMessageWidget {
+impl TableWidget {
 
 	fn on_can_packet(&mut self, packet: &CanPacketIn) {
 
@@ -63,10 +63,10 @@ impl CanMessageWidget {
 
 }
 
-impl Widget for CanMessageWidget {
+impl Widget for TableWidget {
 
 	fn setup(&self, handle: &mut WidgetHandle) {
-        handle.subscribe(CanMessageWidget::on_can_packet);
+        handle.subscribe(TableWidget::on_can_packet);
     }
 
 	fn view(&self) -> iced::Element<'static, EventBox, iced::Renderer<iced::Theme>> {
@@ -84,9 +84,11 @@ impl Widget for CanMessageWidget {
 		})
 		.collect();
 
-		Column::with_children(entries)
+		
+		let content = Column::with_children(entries)
 		.padding(10)
-		.width(Length::Fill)
-		.into()
+		.width(Length::Fill);
+
+		scrollable(content).width(Length::Fill).into()
 	}
 }

@@ -1,7 +1,9 @@
-mod heartbeat;
+mod graph;
+mod table;
 mod handle;
 
-pub use heartbeat::*;
+pub use graph::*;
+pub use table::*;
 pub use handle::*;
 
 use iced::{ Element, Theme };

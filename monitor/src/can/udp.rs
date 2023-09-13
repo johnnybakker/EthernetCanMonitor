@@ -1,6 +1,6 @@
 use std::{net::{SocketAddr, UdpSocket, Ipv4Addr}, convert::Infallible, time::{Duration, Instant}};
 
-use common::can::{CanPacket, CanOpenPacket};
+use common::can::CanPacket;
 use iced::futures::{channel::mpsc::{self, Sender, channel}, SinkExt};
 
 use crate::{EventBox, Event};
