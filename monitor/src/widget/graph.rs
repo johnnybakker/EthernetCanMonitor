@@ -2,7 +2,8 @@ use std::{f32::consts::PI, collections::BTreeMap, time::{Instant, Duration}};
 
 use iced::{widget::{Column, canvas::{Geometry, self, Frame, Stroke, Fill}}, Length, Renderer, Point, Color, Vector};
 
-use crate::{widget::Widget, EventBox, can::{CanPacketIn, self}};
+use crate::{widget::Widget, EventBox, can::CanPacketIn};
+use common::can::CanOpenPacket;
 
 use super::WidgetHandle;
 
@@ -54,6 +55,19 @@ impl iced::widget::canvas::Program<EventBox, Renderer<iced::Theme>> for MyProgra
 		let label_offset_x = -6.0;
 		let label_offset_y = 11.0;
 		
+		let keys: Vec<&u64> = self.data.keys().collect();
+		
+		let from = if keys.len() > max_x as usize {
+			keys.len() - max_x as usize
+		} else {
+			0usize
+		};
+
+		let to = if keys.len() > max_x as usize {
+			from + max_x as usize
+		} else {
+			keys.len()
+		};
 
 		for i in 0 .. max_x + 1 {
 			let x = i as f32 * res_x + offset_x;
@@ -62,7 +76,7 @@ impl iced::widget::canvas::Program<EventBox, Renderer<iced::Theme>> for MyProgra
 			let label_x = i as f32 * res_x + offset_x + label_offset_x;
 			frame.with_save(|frame| {
 				frame.translate([label_x, frame.height()-offset_y].into());
-				frame.fill_text(format!("{}", i));
+				frame.fill_text(format!("{}", (i as usize+from)));
 			});
 		}
 
@@ -80,9 +94,10 @@ impl iced::widget::canvas::Program<EventBox, Renderer<iced::Theme>> for MyProgra
 		}
 
 		let data = canvas::Path::new(|b|{
-			for i in self.data.keys() {
-				let x = *i as f32 * res_x + offset_x;
-				let y = res_y * self.data[i] as f32 + offset_y;
+			for i in from..to {
+				let key = keys[i];
+				let x = (i - from) as f32 * res_x + offset_x;
+				let y = res_y * self.data[key] as f32 + offset_y;
 
 				b.line_to([x, frame.height() - y].into());
 			}
@@ -119,11 +134,13 @@ impl GraphWidget {
 
 	fn on_can_packet(&mut self, _packet: &CanPacketIn) {
 
+		if _packet.0.id ^ _packet.0.get_node_id() as u32 != 0x100 {
+			return;
+		}
+
 		let last_packet_time = _packet.1;
 		let duration = last_packet_time.duration_since(self.start);
-		let key = duration.as_secs();
-
-		println!("Adding {}", key);
+		let key = duration.as_secs() as u64;
 
 		let v = if let Some(v) = self.data.get_mut(&key) {
 			v

@@ -1,5 +1,6 @@
 use std::{net::{UdpSocket, SocketAddr, Ipv4Addr}, time::{Duration, Instant}};
 use common::can::CanPacket;
+use rand::{distributions::Uniform, prelude::Distribution};
 
 fn main() -> std::io::Result<()> {
 	
@@ -18,13 +19,16 @@ fn main() -> std::io::Result<()> {
 		)
 	};
 
-	let sleep_duration = Duration::from_micros(10_000);
-
 	// millisecond accuracy sleeper
 	let spin_sleeper = spin_sleep::SpinSleeper::new(1_000_000)
     	.with_spin_strategy(spin_sleep::SpinStrategy::YieldThread);
-	
+
+	let range = Uniform::new(10u64, 500);
+	let mut rng = rand::thread_rng();
+
 	loop {
+		let sleep_duration = Duration::from_millis(range.sample(&mut rng));
+
 		socket.send_to(buf, broadcast_addr)?;
 		spin_sleeper.sleep(sleep_duration);
 	}
