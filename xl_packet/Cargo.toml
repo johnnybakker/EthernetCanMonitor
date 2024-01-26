@@ -1,0 +1,9 @@
+[package]
+name = "xl_packet"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+spin_sleep = "1.1.1"
+common = { path = "../common" }
+rand = "0.8.5"

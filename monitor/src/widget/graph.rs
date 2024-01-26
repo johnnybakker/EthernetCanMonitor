@@ -133,10 +133,7 @@ pub struct GraphWidget {
 impl GraphWidget {
 
 	fn on_can_packet(&mut self, _packet: &CanPacketIn) {
-
-		if _packet.0.id ^ _packet.0.get_node_id() as u32 != 0x100 {
-			return;
-		}
+	
 
 		let last_packet_time = _packet.1;
 		let duration = last_packet_time.duration_since(self.start);

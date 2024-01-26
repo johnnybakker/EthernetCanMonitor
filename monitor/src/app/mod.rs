@@ -40,7 +40,7 @@ impl Application for App {
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<EventBox>) {
-        let (panes, _) = pane_grid::State::new(WidgetHandle::new(0, GraphWidget::default()));
+        let (panes, _) = pane_grid::State::new(WidgetHandle::new(0, TableWidget::default()));
 
         (
             App {

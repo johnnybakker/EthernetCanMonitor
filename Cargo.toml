@@ -2,5 +2,6 @@
 members = [
 	"monitor",
 	"heartbeat",
-	"common"
+	"common",
+	"xl_packet",
 ]

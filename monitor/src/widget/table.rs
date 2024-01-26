@@ -49,6 +49,7 @@ impl TableWidget {
 
 		let id = packet.0.id;
 
+			println!("GGot can");
 		let entry = match self.map.get_mut(&id) {
 			Some(e) => e,
 			None => {
