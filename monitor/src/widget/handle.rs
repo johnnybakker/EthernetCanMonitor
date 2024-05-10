@@ -19,7 +19,7 @@ impl WidgetHandle {
 
 		let mut handle = Self {
 			id: id,
-			is_pinned: false,
+			is_pinned: true,
 			widget: widget.clone(),
 			subscriptions: Vec::default()
 		};

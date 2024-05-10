@@ -11,6 +11,25 @@ impl CanPacket {
 	pub fn new(id: u32, flags: u8, data: [u8; 8]) -> Self {
 		Self { id, flags, data, crc: 0 }
 	}
+
+	pub fn set_rtr(&mut self, value: bool) {
+		self.flags = self.flags & 0b11111110;
+		if value {
+			self.flags |= 0b00000001;
+		}
+	}
+
+	pub fn set_extended(&mut self, value: bool) {
+		self.flags = self.flags & 0b11111101;
+		if value {
+			self.flags |= 0b00000010;
+		}
+	}
+
+	pub fn set_data_length(&mut self, length: u8) {
+		self.flags = self.flags & 0b00001111;
+		self.flags |= (length << 4) & 0b11110000;
+	}
 }
 
 #[repr(u16)]
