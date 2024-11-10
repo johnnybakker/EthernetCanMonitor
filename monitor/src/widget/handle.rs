@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc, any::TypeId};
 use iced::{Element, Theme, widget::{Row, button, text, pane_grid::{self, Pane, Content}, scrollable, container, row, column, Column}, Color, Length, alignment, theme, Alignment};
-use crate::{Event, EventBox, AppMessage};
+use crate::{can::CanUdpSocket, App, AppMessage, Event, EventBox};
 use super::Widget;
 
 
@@ -8,7 +8,8 @@ pub struct WidgetHandle {
 	pub id: usize,
 	pub is_pinned: bool,
 	widget: Rc<RefCell<dyn Widget>>,
-	subscriptions: Vec<(TypeId, Box<dyn Fn(&mut dyn Widget, &dyn Event)>)>
+	subscriptions: Vec<(TypeId, Box<dyn Fn(&mut dyn Widget, &dyn Event)>)>,
+	socket: Option<CanUdpSocket>
 }
 
 impl WidgetHandle {
@@ -21,7 +22,8 @@ impl WidgetHandle {
 			id: id,
 			is_pinned: true,
 			widget: widget.clone(),
-			subscriptions: Vec::default()
+			subscriptions: Vec::default(),
+			socket: None
 		};
 
 		widget.borrow_mut().setup(&mut handle);
@@ -43,8 +45,17 @@ impl WidgetHandle {
 		None
 	}
 
+	pub fn set_socket(&mut self, socket: Option<CanUdpSocket>) {
+		self.socket = socket;
+	}
+
+	pub fn get_socket(&self) -> Option<CanUdpSocket> {
+		self.socket.clone()
+	}
+
 	pub fn view(&self, pane: Pane, focus: bool, total_panes: usize, is_maximized: bool) -> Content<'static, EventBox, iced::Renderer<Theme>> {
 
+		
 
 		let pin_button = button(
 			text(if self.is_pinned { "Unpin" } else { "Pin" }).size(14),
@@ -161,7 +172,7 @@ fn view_content<'a>(
 		} 
 	} else {
 		controls = controls.push(
-			Row::new().push(handle.get_mut_widget().view())
+			Row::new().push(handle.get_mut_widget().view(handle))
 		);
 	}
 

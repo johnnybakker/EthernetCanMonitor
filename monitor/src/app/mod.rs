@@ -1,23 +1,28 @@
 mod event;
 
-use std::any::TypeId;
+use std::{any::TypeId, borrow::BorrowMut, cell::RefCell};
 
+use common::can::CanPacket;
 pub use event::*;
-use iced::{widget::{PaneGrid, pane_grid::{self}, Container}, Application, Length, Element};
+use iced::{futures::SinkExt, widget::{pane_grid::{self}, Container, PaneGrid}, Application, Element, Length};
 use iced::executor;
 use iced::theme::Theme;
 use iced::Command;
 
-use crate::{can::{self, CanUdpSocket}, widget::{WidgetHandle, TableWidget, GraphWidget}};
+use crate::{
+	can::{self, CanUdpSocket},
+	widget::{WidgetHandle, TableWidget, GraphWidget, SDORequestButton}};
 
 pub struct App {
     panes: pane_grid::State<WidgetHandle>,
     panes_created: usize,
     focus: Option<pane_grid::Pane>,
+	socket: Option<CanUdpSocket>
 }
 
 #[derive(Debug, Clone)]
 pub enum AppMessage {
+	None,
     Split(pane_grid::Axis, pane_grid::Pane),
     SplitFocused(pane_grid::Axis),
     FocusAdjacent(pane_grid::Direction),
@@ -29,6 +34,7 @@ pub enum AppMessage {
     Restore,
     Close(pane_grid::Pane),
     CloseFocused,
+	SendPacket(CanPacket)
 }
 
 impl Event for AppMessage {}
@@ -40,13 +46,14 @@ impl Application for App {
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<EventBox>) {
-        let (panes, _) = pane_grid::State::new(WidgetHandle::new(0, TableWidget::default()));
+        let (panes, _) = pane_grid::State::new(WidgetHandle::new(0, SDORequestButton::default()));
 
         (
             App {
                 panes,
                 panes_created: 1,
                 focus: None,
+				socket: None
             },
             Command::none(),
         )
@@ -54,13 +61,13 @@ impl Application for App {
 
     fn title(&self) -> String {
         String::from("Pane grid - Iced")
-    }
+    }	
 
     fn update(&mut self, message: EventBox) -> Command<EventBox> {
 
 		match message.unbox::<CanUdpSocket>() {
-			Some(_) => {
-				println!("Received sender");
+			Some(socket) => {
+				self.socket = Some(socket.clone())
 			}
 			None => {
 				for widget in self.panes.iter_mut() {
@@ -152,6 +159,24 @@ impl Application for App {
 						}
 					}
 				}
+				AppMessage::SendPacket(packet) => {
+					println!("Send packet");
+
+					let socket = self.socket.borrow_mut();
+					let packet = packet.clone();
+
+					if let Some(socket) = socket {
+						let mut socket = socket.0.clone();
+						
+						return Command::perform(async move {
+							let _result = socket.send(packet).await;
+						}, |_| EventBox::new(AppMessage::None));
+						
+					} else {
+						println!("No socket available");
+					}
+				},
+				AppMessage::None => {},
 			}
 
 		}

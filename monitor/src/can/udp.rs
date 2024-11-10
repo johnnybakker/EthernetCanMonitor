@@ -1,4 +1,4 @@
-use std::{net::{SocketAddr, UdpSocket, Ipv4Addr}, convert::Infallible, time::{Duration, Instant}};
+use std::{convert::Infallible, net::{Ipv4Addr, SocketAddr, UdpSocket}, sync::Arc, time::{Duration, Instant}};
 
 use common::can::CanPacket;
 use iced::futures::{channel::mpsc::{self, Sender, channel}, SinkExt};
@@ -37,6 +37,7 @@ pub async fn udp_socket(mut output: mpsc::Sender<EventBox>) -> Infallible {
 				)
 			};
 
+			println!("Sending packet");
 			let _ = socket.send_to(buf, broadcast_addr);
 		}
 	

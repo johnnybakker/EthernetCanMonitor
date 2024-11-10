@@ -2,7 +2,7 @@ use std::{time::{Instant, Duration}, collections::BTreeMap};
 use common::can::{CanOpenPacket, CanOpenType, CanPacket};
 use iced::{widget::{Text, scrollable, Column, Row }, Length};
 
-use crate::{widget::Widget, EventBox, can::CanPacketIn};
+use crate::{can::CanPacketIn, widget::Widget, App, EventBox};
 
 use super::WidgetHandle;
 
@@ -85,7 +85,7 @@ impl Widget for TableWidget {
         handle.subscribe(TableWidget::on_can_packet);
     }
 
-	fn view(&self) -> iced::Element<'static, EventBox, iced::Renderer<iced::Theme>> {
+	fn view(&self, handle: &WidgetHandle) -> iced::Element<'static, EventBox, iced::Renderer<iced::Theme>> {
 
 		let mut entries = Vec::new();
 		entries.push(

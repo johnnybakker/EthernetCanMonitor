@@ -2,7 +2,7 @@ use std::{f32::consts::PI, collections::BTreeMap, time::{Instant, Duration}};
 
 use iced::{widget::{Column, canvas::{Geometry, self, Frame, Stroke, Fill}}, Length, Renderer, Point, Color, Vector};
 
-use crate::{widget::Widget, EventBox, can::CanPacketIn};
+use crate::{can::CanPacketIn, widget::Widget, App, EventBox};
 use common::can::CanOpenPacket;
 
 use super::WidgetHandle;
@@ -157,7 +157,7 @@ impl Widget for GraphWidget {
         handle.subscribe(GraphWidget::on_can_packet);
     }
 
-	fn view(&self) -> iced::Element<'static, EventBox, iced::Renderer<iced::Theme>> {
+	fn view(&self, handle: &WidgetHandle) -> iced::Element<'static, EventBox, iced::Renderer<iced::Theme>> {
 
 		let canvas = iced::widget::Canvas::new(
 			MyProgram {
